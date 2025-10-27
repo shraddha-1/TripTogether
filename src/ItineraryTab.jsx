@@ -13,7 +13,6 @@ export default function ItineraryTab({ currentTrip, setCurrentTrip, trips, setTr
     budget: ''
   });
 
-  // Column management - store in trip data to persist
   if (!currentTrip.itineraryColumns) {
     currentTrip.itineraryColumns = [
       { id: 'day', name: 'Day', width: 'w-20', editable: false, canDelete: false },
@@ -258,7 +257,14 @@ export default function ItineraryTab({ currentTrip, setCurrentTrip, trips, setTr
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     {col.name}
                   </label>
-                  {col.id === 'activities' ? (
+                  {col.id === 'dates' ? (
+                    <input
+                      type="date"
+                      value={newRow[col.id] || ''}
+                      onChange={(e) => setNewRow({ ...newRow, [col.id]: e.target.value })}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  ) : col.id === 'activities' ? (
                     <textarea
                       placeholder={`Enter ${col.name.toLowerCase()}`}
                       value={newRow[col.id] || ''}
@@ -332,7 +338,14 @@ export default function ItineraryTab({ currentTrip, setCurrentTrip, trips, setTr
                     {columns.map(col => (
                       <td key={col.id} className="px-4 py-3">
                         {editingRow === row.id && col.editable ? (
-                          col.id === 'activities' ? (
+                          col.id === 'dates' ? (
+                            <input
+                              type="date"
+                              value={editingData[col.id] || ''}
+                              onChange={(e) => setEditingData({ ...editingData, [col.id]: e.target.value })}
+                              className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                            />
+                          ) : col.id === 'activities' ? (
                             <textarea
                               value={editingData[col.id] || ''}
                               onChange={(e) => setEditingData({ ...editingData, [col.id]: e.target.value })}
@@ -357,6 +370,8 @@ export default function ItineraryTab({ currentTrip, setCurrentTrip, trips, setTr
                               <span className="font-semibold text-green-600">
                                 {row[col.id] ? `${parseFloat(row[col.id]).toFixed(2)}` : '-'}
                               </span>
+                            ) : col.id === 'dates' ? (
+                              <span>{row[col.id] ? new Date(row[col.id]).toLocaleDateString() : '-'}</span>
                             ) : col.id === 'activities' ? (
                               <div className="whitespace-pre-wrap max-w-xs">{row[col.id] || '-'}</div>
                             ) : (

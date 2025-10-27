@@ -1,968 +1,524 @@
-import { useState, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { X, Search } from 'lucide-react';
 
-export const InteractiveMapComponent = ({ 
-  startPoint, 
-  destination, 
-  customPins, 
-  onAddPin, 
-  currentUser, 
-  onUpdatePin,
+export const InteractiveMapComponent = ({
+  startPoint,
+  destination,
+  customPins,
+  onAddPin,
+  currentUser,
+  startCoordinates,
+  destCoordinates,
 }) => {
-  const canvasRef = useRef(null);
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [pinData, setPinData] = useState({ lat: null, lng: null, name: '', description: '', address: '', x: null, y: null });
-  const [showPinModal, setShowPinModal] = useState(false);
+  const mapContainerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const startMarkerRef = useRef(null);
+  const destMarkerRef = useRef(null);
+
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchPosition, setSearchPosition] = useState({ lat: 0, lng: 0 });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedPlace, setSelectedPlace] = useState(null);
+  const [pinData, setPinData] = useState({ name: '', description: '' });
   const [hoveredPin, setHoveredPin] = useState(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [hoveredRoutePin, setHoveredRoutePin] = useState(null);
-  const [draggingPinIndex, setDraggingPinIndex] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const popupPositionRef = useRef({ x: 0, y: 0 });
 
+  const MAPBOX_TOKEN = 'pk.eyJ1Ijoic2hyYWRkaGEtc2hpbmRlIiwiYSI6ImNtZ29mbnA5azF1dmsybm9rYnk1d29tNHUifQ.WggehwJ0oUYLhFR8mzVnnQ';
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const updateSize = () => {
-      const rect = canvas.getBoundingClientRect();
-      setCanvasSize({ width: rect.width, height: rect.height });
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-    };
-
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, []);
-
-  const getRoutePositions = () => {
-    if (!canvasSize.width || !canvasSize.height) return { startX: 0, startY: 0, endX: 0, endY: 0 };
-    
-    const startX = canvasSize.width * 0.15;
-    const startY = canvasSize.height * 0.3;
-    const endX = canvasSize.width * 0.85;
-    const endY = canvasSize.height * 0.7;
-
-    return { startX, startY, endX, endY };
-  };
-
-  const getDisplayPins = () => {
-    if (!customPins || !customPins.length || !canvasSize.width || !canvasSize.height) return [];
-
-    const { startX, startY, endX, endY } = getRoutePositions();
-    const totalPins = customPins.length;
-    
-    return customPins.map((pin, idx) => {
-      // If pin has x,y coordinates, use them (from dragging)
-      if (pin.x !== undefined && pin.y !== undefined) {
-        return { ...pin };
-      }
-      
-      // Calculate position along route based on order
-      const progress = (idx + 1) / (totalPins + 1);
-      const x = startX + (endX - startX) * progress;
-      const curveOffset = Math.sin(progress * Math.PI) * 80;
-      const y = startY + (endY - startY) * progress + curveOffset;
-
-      return { ...pin, x, y };
-    });
-  };
-
-  const displayPins = getDisplayPins();
-
-  const drawSmoothRoute = (ctx, startX, startY, endX, endY, pins) => {
-    if (pins.length === 0) return;
-    
-    if (pins.length === 1) {
-      const midX1 = (startX + pins[0].x) / 2;
-      const midY1 = (startY + pins[0].y) / 2;
-      ctx.quadraticCurveTo(midX1, midY1 - 30, pins[0].x, pins[0].y);
-      
-      const midX2 = (pins[0].x + endX) / 2;
-      const midY2 = (pins[0].y + endY) / 2;
-      ctx.quadraticCurveTo(midX2, midY2 + 30, endX, endY);
-    } else {
-      for (let i = 0; i <= pins.length; i++) {
-        const prevX = i === 0 ? startX : pins[i - 1].x;
-        const prevY = i === 0 ? startY : pins[i - 1].y;
-        const currX = i === pins.length ? endX : pins[i].x;
-        const currY = i === pins.length ? endY : pins[i].y;
-        
-        const midX = (prevX + currX) / 2;
-        const midY = (prevY + currY) / 2;
-        const offset = i % 2 === 0 ? -20 : 20;
-        
-        ctx.quadraticCurveTo(midX, midY + offset, currX, currY);
-      }
-    }
-  };
-// const drawMap = () => {
-//   const canvas = canvasRef.current;
-//   if (!canvas || !canvasSize.width || !canvasSize.height) return;
-
-//   const ctx = canvas.getContext('2d');
-//   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-//   // Clean white background
-//   ctx.fillStyle = '#ffffff';
-//   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-//   // Subtle geometric pattern
-//   ctx.strokeStyle = 'rgba(0, 0, 0, 0.02)';
-//   ctx.lineWidth = 1;
-//   for (let i = -canvas.height; i < canvas.width; i += 40) {
-//     ctx.beginPath();
-//     ctx.moveTo(i, 0);
-//     ctx.lineTo(i + canvas.height, canvas.height);
-//     ctx.stroke();
-//   }
-
-//   const { startX, startY, endX, endY } = getRoutePositions();
-
-//   // Ultra-clean route
-//   if (displayPins.length > 0) {
-//     // Subtle shadow
-//     ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
-//     ctx.lineWidth = 8;
-//     ctx.lineCap = 'round';
-//     ctx.lineJoin = 'round';
-//     ctx.beginPath();
-//     ctx.moveTo(startX, startY + 2);
-//     drawSmoothRoute(ctx, startX, startY + 2, endX, endY + 2, displayPins.map(p => ({...p, y: p.y + 2})));
-//     ctx.stroke();
-
-//     // Main route - single color
-//     ctx.strokeStyle = '#000000';
-//     ctx.lineWidth = 3;
-//     ctx.beginPath();
-//     ctx.moveTo(startX, startY);
-//     drawSmoothRoute(ctx, startX, startY, endX, endY, displayPins);
-//     ctx.stroke();
-//   }
-
-//   // Minimalist start marker - just a circle
-//   ctx.fillStyle = '#000000';
-//   ctx.beginPath();
-//   ctx.arc(startX, startY, 12, 0, Math.PI * 2);
-//   ctx.fill();
-  
-//   ctx.fillStyle = '#ffffff';
-//   ctx.beginPath();
-//   ctx.arc(startX, startY, 4, 0, Math.PI * 2);
-//   ctx.fill();
-
-//   // Minimalist end marker
-//   ctx.fillStyle = '#000000';
-//   ctx.beginPath();
-//   ctx.arc(endX, endY, 12, 0, Math.PI * 2);
-//   ctx.fill();
-  
-//   ctx.fillStyle = '#ffffff';
-//   ctx.beginPath();
-//   ctx.arc(endX, endY, 4, 0, Math.PI * 2);
-//   ctx.fill();
-
-//   // Clean pins
-//   displayPins.forEach((pin, idx) => {
-//     const isHovered = hoveredRoutePin === idx;
-//     const isDraggingThis = draggingPinIndex === idx;
-//     const size = isHovered || isDraggingThis ? 14 : 11;
-    
-//     ctx.fillStyle = isHovered || isDraggingThis ? '#666666' : '#000000';
-//     ctx.beginPath();
-//     ctx.arc(pin.x, pin.y, size, 0, Math.PI * 2);
-//     ctx.fill();
-    
-//     ctx.fillStyle = '#ffffff';
-//     ctx.font = `bold ${size}px Inter, Arial, sans-serif`;
-//     ctx.textAlign = 'center';
-//     ctx.textBaseline = 'middle';
-//     ctx.fillText(idx + 1, pin.x, pin.y);
-//   });
-
-//   // Clean typography
-//   ctx.fillStyle = '#000000';
-//   ctx.font = '600 16px Inter, Arial, sans-serif';
-//   ctx.textAlign = 'left';
-//   const startCity = startPoint ? startPoint.split(',')[0].trim().toUpperCase() : 'START';
-//   ctx.fillText(startCity, startX - 20, startY + 30);
-
-//   ctx.textAlign = 'right';
-//   const endCity = destination ? destination.split(',')[0].trim().toUpperCase() : 'END';
-//   ctx.fillText(endCity, endX + 20, endY - 30);
-// };
-
-const drawMap = () => {
-  const canvas = canvasRef.current;
-  if (!canvas || !canvasSize.width || !canvasSize.height) return;
-
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Dark gradient background
-  const bgGradient = ctx.createRadialGradient(
-    canvas.width / 2, canvas.height / 2, 0,
-    canvas.width / 2, canvas.height / 2, canvas.width
-  );
-  bgGradient.addColorStop(0, '#1a1a2e');
-  bgGradient.addColorStop(0.5, '#16213e');
-  bgGradient.addColorStop(1, '#0f1419');
-  ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Glowing grid
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)';
-  ctx.lineWidth = 1;
-  ctx.shadowColor = 'rgba(0, 240, 255, 0.5)';
-  ctx.shadowBlur = 3;
-  for (let i = 0; i < canvas.width; i += 80) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, canvas.height);
-    ctx.stroke();
-  }
-  for (let i = 0; i < canvas.height; i += 80) {
-    ctx.beginPath();
-    ctx.moveTo(0, i);
-    ctx.lineTo(canvas.width, i);
-    ctx.stroke();
-  }
-
-  ctx.shadowBlur = 0;
-
-  const { startX, startY, endX, endY } = getRoutePositions();
-
-  // Draw route with neon glow
-  if (displayPins.length > 0) {
-    // Outer glow
-    ctx.strokeStyle = 'rgba(255, 0, 255, 0.3)';
-    ctx.lineWidth = 20;
-    ctx.shadowColor = '#ff00ff';
-    ctx.shadowBlur = 25;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    drawSmoothRoute(ctx, startX, startY, endX, endY, displayPins);
-    ctx.stroke();
-
-    // Main neon route
-    const routeGradient = ctx.createLinearGradient(startX, startY, endX, endY);
-    routeGradient.addColorStop(0, '#00f5ff');
-    routeGradient.addColorStop(0.5, '#ff00ff');
-    routeGradient.addColorStop(1, '#ffff00');
-    
-    ctx.strokeStyle = routeGradient;
-    ctx.lineWidth = 4;
-    ctx.shadowBlur = 15;
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    drawSmoothRoute(ctx, startX, startY, endX, endY, displayPins);
-    ctx.stroke();
-  }
-
-  ctx.shadowBlur = 0;
-
-  // Neon start marker
-  ctx.save();
-  ctx.shadowColor = '#00f5ff';
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = '#00f5ff';
-  ctx.beginPath();
-  ctx.arc(startX, startY, 20, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#0a0a0a';
-  ctx.beginPath();
-  ctx.arc(startX, startY, 15, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#00f5ff';
-  ctx.beginPath();
-  ctx.arc(startX, startY, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  // Neon end marker
-  ctx.save();
-  ctx.shadowColor = '#ffff00';
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = '#ffff00';
-  ctx.beginPath();
-  ctx.arc(endX, endY, 20, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#0a0a0a';
-  ctx.beginPath();
-  ctx.arc(endX, endY, 15, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#ffff00';
-  ctx.beginPath();
-  ctx.arc(endX, endY, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  // Glowing pins
-  displayPins.forEach((pin, idx) => {
-    const isHovered = hoveredRoutePin === idx;
-    const isDraggingThis = draggingPinIndex === idx;
-    const size = isHovered || isDraggingThis ? 18 : 15;
-    
-    ctx.save();
-    ctx.shadowColor = '#ff00ff';
-    ctx.shadowBlur = isHovered || isDraggingThis ? 25 : 15;
-    ctx.fillStyle = '#ff00ff';
-    ctx.beginPath();
-    ctx.arc(pin.x, pin.y, size, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#1a1a2e';
-    ctx.beginPath();
-    ctx.arc(pin.x, pin.y, size - 5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.fillStyle = '#ff00ff';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(idx + 1, pin.x, pin.y);
-    ctx.restore();
-  });
-
-  // Glowing text labels
-  ctx.save();
-  ctx.shadowColor = '#00f5ff';
-  ctx.shadowBlur = 10;
-  ctx.fillStyle = '#00f5ff';
-  ctx.font = 'bold 18px Inter, Arial, sans-serif';
-  ctx.textAlign = 'left';
-  const startCity = startPoint ? startPoint.split(',')[0].trim() : 'Start';
-  ctx.fillText(startCity, startX - 20, startY + 40);
-
-  ctx.shadowColor = '#ffff00';
-  ctx.fillStyle = '#ffff00';
-  ctx.textAlign = 'right';
-  const endCity = destination ? destination.split(',')[0].trim() : 'End';
-  ctx.fillText(endCity, endX + 20, endY - 40);
-  ctx.restore();
-};
-
-// const drawMap = () => {
-//   const canvas = canvasRef.current;
-//   if (!canvas || !canvasSize.width || !canvasSize.height) return;
-
-//   const ctx = canvas.getContext('2d');
-//   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-//   // Background: aged parchment with gradient
-//   const bgGradient = ctx.createRadialGradient(
-//     canvas.width / 2, canvas.height / 2, 0,
-//     canvas.width / 2, canvas.height / 2, canvas.width * 0.7
-//   );
-//   bgGradient.addColorStop(0, '#faf6ed');
-//   bgGradient.addColorStop(0.7, '#f4ecd8');
-//   bgGradient.addColorStop(1, '#e8dcc0');
-//   ctx.fillStyle = bgGradient;
-//   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-//   // Add paper texture spots
-//   ctx.fillStyle = 'rgba(139, 94, 60, 0.03)';
-//   for (let i = 0; i < 150; i++) {
-//     const x = Math.random() * canvas.width;
-//     const y = Math.random() * canvas.height;
-//     const size = Math.random() * 3;
-//     ctx.fillRect(x, y, size, size);
-//   }
-
-//   // Decorative ornate border
-//   ctx.strokeStyle = '#a08560';
-//   ctx.lineWidth = 8;
-//   ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30);
-  
-//   ctx.strokeStyle = '#c2b280';
-//   ctx.lineWidth = 3;
-//   ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40);
-
-//   // Corner decorations
-//   const drawCornerDecor = (x, y, rotation) => {
-//     ctx.save();
-//     ctx.translate(x, y);
-//     ctx.rotate(rotation);
-//     ctx.strokeStyle = '#8b5e3c';
-//     ctx.lineWidth = 2;
-//     ctx.beginPath();
-//     ctx.moveTo(0, 0);
-//     ctx.lineTo(15, 0);
-//     ctx.moveTo(0, 0);
-//     ctx.lineTo(0, 15);
-//     ctx.moveTo(15, 0);
-//     ctx.quadraticCurveTo(5, 5, 0, 15);
-//     ctx.stroke();
-//     ctx.restore();
-//   };
-  
-//   drawCornerDecor(30, 30, 0);
-//   drawCornerDecor(canvas.width - 30, 30, Math.PI / 2);
-//   drawCornerDecor(canvas.width - 30, canvas.height - 30, Math.PI);
-//   drawCornerDecor(30, canvas.height - 30, -Math.PI / 2);
-
-//   // Subtle grid: explorer navigation lines
-//   ctx.strokeStyle = 'rgba(194, 178, 128, 0.2)';
-//   ctx.lineWidth = 1;
-//   ctx.setLineDash([8, 12]);
-//   for (let i = 50; i < canvas.width; i += 80) {
-//     ctx.beginPath();
-//     ctx.moveTo(i, 30);
-//     ctx.lineTo(i, canvas.height - 30);
-//     ctx.stroke();
-//   }
-//   for (let i = 50; i < canvas.height; i += 80) {
-//     ctx.beginPath();
-//     ctx.moveTo(30, i);
-//     ctx.lineTo(canvas.width - 30, i);
-//     ctx.stroke();
-//   }
-//   ctx.setLineDash([]);
-
-//   const { startX, startY, endX, endY } = getRoutePositions();
-
-//   // Route: layered path with shadow
-//   if (displayPins.length > 0) {
-//     // Shadow layer
-//     ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
-//     ctx.lineWidth = 6;
-//     ctx.lineCap = 'round';
-//     ctx.beginPath();
-//     ctx.moveTo(startX + 2, startY + 2);
-//     drawSmoothRoute(ctx, startX + 2, startY + 2, endX + 2, endY + 2, 
-//       displayPins.map(p => ({...p, x: p.x + 2, y: p.y + 2})));
-//     ctx.stroke();
-
-//     // Main path
-//     ctx.strokeStyle = '#8b5e3c';
-//     ctx.lineWidth = 5;
-//     ctx.setLineDash([15, 8]);
-//     ctx.beginPath();
-//     ctx.moveTo(startX, startY);
-//     drawSmoothRoute(ctx, startX, startY, endX, endY, displayPins);
-//     ctx.stroke();
-//     ctx.setLineDash([]);
-
-//     // Add small arrows along path
-//     displayPins.forEach((pin, idx) => {
-//       if (idx < displayPins.length - 1) {
-//         const nextPin = displayPins[idx + 1];
-//         const angle = Math.atan2(nextPin.y - pin.y, nextPin.x - pin.x);
-//         const midX = (pin.x + nextPin.x) / 2;
-//         const midY = (pin.y + nextPin.y) / 2;
-        
-//         ctx.save();
-//         ctx.translate(midX, midY);
-//         ctx.rotate(angle);
-//         ctx.fillStyle = '#8b5e3c';
-//         ctx.beginPath();
-//         ctx.moveTo(8, 0);
-//         ctx.lineTo(0, -5);
-//         ctx.lineTo(0, 5);
-//         ctx.closePath();
-//         ctx.fill();
-//         ctx.restore();
-//       }
-//     });
-//   }
-
-//   // Start marker: detailed compass rose
-//   ctx.save();
-//   ctx.translate(startX, startY);
-  
-//   // Compass outer ring
-//   ctx.strokeStyle = '#6b4423';
-//   ctx.lineWidth = 3;
-//   ctx.beginPath();
-//   ctx.arc(0, 0, 24, 0, Math.PI * 2);
-//   ctx.stroke();
-  
-//   // Compass inner circle
-//   const compassGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 20);
-//   compassGradient.addColorStop(0, '#d4a574');
-//   compassGradient.addColorStop(1, '#8b6f47');
-//   ctx.fillStyle = compassGradient;
-//   ctx.beginPath();
-//   ctx.arc(0, 0, 20, 0, Math.PI * 2);
-//   ctx.fill();
-  
-//   // Compass points
-//   ctx.fillStyle = '#2c1810';
-//   for (let i = 0; i < 4; i++) {
-//     ctx.save();
-//     ctx.rotate((i * Math.PI) / 2);
-//     ctx.beginPath();
-//     ctx.moveTo(0, -18);
-//     ctx.lineTo(-4, -8);
-//     ctx.lineTo(4, -8);
-//     ctx.closePath();
-//     ctx.fill();
-//     ctx.restore();
-//   }
-  
-//   // Center dot
-//   ctx.fillStyle = '#fff';
-//   ctx.beginPath();
-//   ctx.arc(0, 0, 5, 0, Math.PI * 2);
-//   ctx.fill();
-  
-//   ctx.fillStyle = '#2c1810';
-//   ctx.font = 'bold 10px serif';
-//   ctx.textAlign = 'center';
-//   ctx.textBaseline = 'middle';
-//   ctx.fillText('N', 0, -10);
-//   ctx.restore();
-
-//   // End marker: waving flag
-//   ctx.save();
-//   ctx.translate(endX, endY);
-  
-//   // Flag pole
-//   ctx.strokeStyle = '#2c1810';
-//   ctx.lineWidth = 3;
-//   ctx.beginPath();
-//   ctx.moveTo(0, -25);
-//   ctx.lineTo(0, 25);
-//   ctx.stroke();
-  
-//   // Flag with wave effect
-//   ctx.fillStyle = '#c41e3a';
-//   ctx.beginPath();
-//   ctx.moveTo(0, -25);
-//   ctx.quadraticCurveTo(15, -22, 25, -18);
-//   ctx.quadraticCurveTo(15, -14, 0, -12);
-//   ctx.closePath();
-//   ctx.fill();
-  
-//   ctx.strokeStyle = '#8b0000';
-//   ctx.lineWidth = 1;
-//   ctx.stroke();
-  
-//   // Flag pole top
-//   ctx.fillStyle = '#d4a574';
-//   ctx.beginPath();
-//   ctx.arc(0, -25, 3, 0, Math.PI * 2);
-//   ctx.fill();
-  
-//   ctx.restore();
-
-//   // Pins: detailed scenic markers with glow
-//   displayPins.forEach((pin, idx) => {
-//     const isHovered = hoveredRoutePin === idx;
-//     const isDraggingThis = draggingPinIndex === idx;
-//     const size = isHovered || isDraggingThis ? 20 : 16;
-
-//     ctx.save();
-    
-//     // Glow effect when hovered
-//     if (isHovered || isDraggingThis) {
-//       ctx.shadowColor = '#d4a574';
-//       ctx.shadowBlur = 15;
-//     }
-    
-//     // Pin shadow
-//     ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-//     ctx.beginPath();
-//     ctx.arc(pin.x + 2, pin.y + 2, size, 0, Math.PI * 2);
-//     ctx.fill();
-    
-//     // Pin outer ring
-//     ctx.shadowBlur = 0;
-//     ctx.fillStyle = '#6b4423';
-//     ctx.beginPath();
-//     ctx.arc(pin.x, pin.y, size, 0, Math.PI * 2);
-//     ctx.fill();
-    
-//     // Pin inner circle with gradient
-//     const pinGradient = ctx.createRadialGradient(pin.x, pin.y, 0, pin.x, pin.y, size - 3);
-//     pinGradient.addColorStop(0, '#f4d03f');
-//     pinGradient.addColorStop(1, '#d4a574');
-//     ctx.fillStyle = pinGradient;
-//     ctx.beginPath();
-//     ctx.arc(pin.x, pin.y, size - 3, 0, Math.PI * 2);
-//     ctx.fill();
-
-//     // Number
-//     ctx.fillStyle = '#2c1810';
-//     ctx.font = `bold ${size - 4}px serif`;
-//     ctx.textAlign = 'center';
-//     ctx.textBaseline = 'middle';
-//     ctx.fillText(idx + 1, pin.x, pin.y);
-
-//     ctx.restore();
-//   });
-
-//   // Labels: elegant city names with shadow
-//   ctx.save();
-//   ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-//   ctx.shadowBlur = 3;
-//   ctx.shadowOffsetX = 1;
-//   ctx.shadowOffsetY = 1;
-  
-//   ctx.fillStyle = '#2c1810';
-//   ctx.font = 'italic bold 18px Georgia, serif';
-//   ctx.textAlign = 'center';
-//   const startCity = startPoint ? startPoint.split(',')[0].trim() : 'Journey Begins';
-//   ctx.fillText(startCity, startX, startY + 45);
-
-//   const endCity = destination ? destination.split(',')[0].trim() : 'Destination';
-//   ctx.fillText(endCity, endX, endY - 45);
-//   ctx.restore();
-
-//   // Decorative compass in corner
-//   ctx.save();
-//   ctx.translate(canvas.width - 70, canvas.height - 70);
-  
-//   // Compass background
-//   ctx.fillStyle = 'rgba(212, 165, 116, 0.3)';
-//   ctx.beginPath();
-//   ctx.arc(0, 0, 35, 0, Math.PI * 2);
-//   ctx.fill();
-  
-//   ctx.strokeStyle = '#8b5e3c';
-//   ctx.lineWidth = 2;
-//   ctx.beginPath();
-//   ctx.arc(0, 0, 30, 0, Math.PI * 2);
-//   ctx.stroke();
-  
-//   // Compass directions
-//   ctx.fillStyle = '#2c1810';
-//   ctx.font = 'bold 14px serif';
-//   ctx.textAlign = 'center';
-//   ctx.textBaseline = 'middle';
-//   ctx.fillText('N', 0, -18);
-//   ctx.fillText('S', 0, 18);
-//   ctx.fillText('E', 18, 0);
-//   ctx.fillText('W', -18, 0);
-  
-//   // Center
-//   ctx.fillStyle = '#c41e3a';
-//   ctx.beginPath();
-//   ctx.arc(0, 0, 4, 0, Math.PI * 2);
-//   ctx.fill();
-  
-//   ctx.restore();
-
-//   // Title banner at top
-//   ctx.save();
-//   ctx.fillStyle = 'rgba(139, 94, 60, 0.15)';
-//   ctx.fillRect(canvas.width / 2 - 150, 35, 300, 35);
-  
-//   ctx.strokeStyle = '#8b5e3c';
-//   ctx.lineWidth = 2;
-//   ctx.strokeRect(canvas.width / 2 - 150, 35, 300, 35);
-  
-//   ctx.fillStyle = '#2c1810';
-//   ctx.font = 'italic bold 20px Georgia, serif';
-//   ctx.textAlign = 'center';
-//   ctx.textBaseline = 'middle';
-//   ctx.fillText('✦ Journey Map ✦', canvas.width / 2, 52);
-//   ctx.restore();
-// };
-
-// const drawMap = () => {
-//   const canvas = canvasRef.current;
-//   if (!canvas || !canvasSize.width || !canvasSize.height) return;
-
-//   const ctx = canvas.getContext('2d');
-//   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-//   // Background: parchment texture
-//   ctx.fillStyle = '#f4ecd8';
-//   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-//   // Decorative border
-//   ctx.strokeStyle = '#c2b280';
-//   ctx.lineWidth = 6;
-//   ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-
-//   // Grid: dashed explorer lines
-//   ctx.strokeStyle = '#d8caa8';
-//   ctx.lineWidth = 1;
-//   ctx.setLineDash([4, 6]);
-//   for (let i = 0; i < canvas.width; i += 100) {
-//     ctx.beginPath();
-//     ctx.moveTo(i, 0);
-//     ctx.lineTo(i, canvas.height);
-//     ctx.stroke();
-//   }
-//   for (let i = 0; i < canvas.height; i += 100) {
-//     ctx.beginPath();
-//     ctx.moveTo(0, i);
-//     ctx.lineTo(canvas.width, i);
-//     ctx.stroke();
-//   }
-//   ctx.setLineDash([]);
-
-//   const { startX, startY, endX, endY } = getRoutePositions();
-
-//   // Route: dashed path with arrowheads
-//   if (displayPins.length > 0) {
-//     ctx.strokeStyle = '#8b5e3c';
-//     ctx.lineWidth = 3;
-//     ctx.setLineDash([10, 6]);
-//     ctx.beginPath();
-//     ctx.moveTo(startX, startY);
-//     drawSmoothRoute(ctx, startX, startY, endX, endY, displayPins);
-//     ctx.stroke();
-//     ctx.setLineDash([]);
-//   }
-
-//   // Start marker: compass rose
-//   ctx.save();
-//   ctx.translate(startX, startY);
-//   ctx.fillStyle = '#3e3e3e';
-//   ctx.beginPath();
-//   ctx.arc(0, 0, 20, 0, Math.PI * 2);
-//   ctx.fill();
-//   ctx.fillStyle = '#ffffff';
-//   ctx.font = 'bold 14px serif';
-//   ctx.textAlign = 'center';
-//   ctx.textBaseline = 'middle';
-//   ctx.fillText('S', 0, 0);
-//   ctx.restore();
-
-//   // End marker: flag
-//   ctx.save();
-//   ctx.translate(endX, endY);
-//   ctx.fillStyle = '#8b0000';
-//   ctx.beginPath();
-//   ctx.moveTo(0, -20);
-//   ctx.lineTo(20, -10);
-//   ctx.lineTo(0, 0);
-//   ctx.closePath();
-//   ctx.fill();
-//   ctx.strokeStyle = '#000';
-//   ctx.lineWidth = 2;
-//   ctx.beginPath();
-//   ctx.moveTo(0, 0);
-//   ctx.lineTo(0, 20);
-//   ctx.stroke();
-//   ctx.restore();
-
-//   // Pins: scenic markers
-//   displayPins.forEach((pin, idx) => {
-//     const isHovered = hoveredRoutePin === idx;
-//     const isDraggingThis = draggingPinIndex === idx;
-//     const size = isHovered || isDraggingThis ? 16 : 12;
-
-//     ctx.save();
-//     ctx.fillStyle = '#4b3f2f';
-//     ctx.beginPath();
-//     ctx.arc(pin.x, pin.y, size, 0, Math.PI * 2);
-//     ctx.fill();
-
-//     ctx.fillStyle = '#fff';
-//     ctx.font = 'bold 10px serif';
-//     ctx.textAlign = 'center';
-//     ctx.textBaseline = 'middle';
-//     ctx.fillText(idx + 1, pin.x, pin.y);
-
-//     // Label below pin
-//     if (pin.label) {
-//       ctx.fillStyle = '#3e3e3e';
-//       ctx.font = 'italic 12px serif';
-//       ctx.textBaseline = 'top';
-//       ctx.fillText(pin.label, pin.x, pin.y + size + 4);
-//     }
-//     ctx.restore();
-//   });
-
-//   // Labels: start and end city
-//   ctx.save();
-//   ctx.fillStyle = '#3e3e3e';
-//   ctx.font = 'bold 16px serif';
-//   ctx.textAlign = 'left';
-//   const startCity = startPoint ? startPoint.split(',')[0].trim() : 'Start';
-//   ctx.fillText(`Start: ${startCity}`, startX + 25, startY + 10);
-
-//   ctx.textAlign = 'right';
-//   const endCity = destination ? destination.split(',')[0].trim() : 'End';
-//   ctx.fillText(`End: ${endCity}`, endX - 25, endY - 30);
-//   ctx.restore();
-
-//   // Compass in corner
-//   ctx.save();
-//   ctx.translate(canvas.width - 60, canvas.height - 60);
-//   ctx.fillStyle = '#3e3e3e';
-//   ctx.font = 'bold 14px serif';
-//   ctx.textAlign = 'center';
-//   ctx.fillText('🧭', 0, 0);
-//   ctx.restore();
-// };
-
-
-  useEffect(() => {
-    drawMap();
-  }, [startPoint, destination, displayPins, hoveredRoutePin, canvasSize, draggingPinIndex]);
-
-  const handleCanvasClick = (e) => {
-    if (draggingPinIndex !== null) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const { startX, startY, endX, endY } = getRoutePositions();
-    const distToStart = Math.sqrt((x - startX) ** 2 + (y - startY) ** 2);
-    const distToEnd = Math.sqrt((x - endX) ** 2 + (y - endY) ** 2);
-    
-    if (distToStart < 25 || distToEnd < 25) return;
-
-    let clickedOnPin = false;
-    displayPins.forEach((pin) => {
-      const dist = Math.sqrt((pin.x - x) ** 2 + (pin.y - y) ** 2);
-      if (dist < 18) clickedOnPin = true;
-    });
-
-    if (clickedOnPin) return;
-
-    setPinData({
-      lat: parseFloat((y / canvas.height).toFixed(6)),
-      lng: parseFloat((x / canvas.width).toFixed(6)),
-      name: '',
-      description: '',
-      x: x,
-      y: y,
-    });
-    setShowPinModal(true);
-  };
-
-  const handleAddPin = () => {
-    if (pinData.name.trim()) {
-      const newPin = {
-        id: Date.now(),
-        lat: pinData.lat,
-        lng: pinData.lng,
-        name: pinData.name.trim(),
-        description: pinData.description.trim() || 'No description',
-        address: pinData.address,
-        addedBy: currentUser,
-        timestamp: new Date().toLocaleString(),
-        x: pinData.x,
-        y: pinData.y,
-      };
-      
-      onAddPin(newPin);
-      setPinData({ lat: null, lng: null, name: '', description: '', address: '', x: null, y: null });
-      setShowPinModal(false);
-    }
-  };
-
-  const handleMouseDown = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    for (let idx = 0; idx < displayPins.length; idx++) {
-      const pin = displayPins[idx];
-      const dist = Math.sqrt((pin.x - x) ** 2 + (pin.y - y) ** 2);
-      if (dist < 18) {
-        setDraggingPinIndex(idx);
-        e.preventDefault();
-        return;
-      }
-    }
-  };
-
-  const handleMouseMove = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setMousePos({ x: e.clientX, y: e.clientY });
-
-    if (draggingPinIndex !== null) {
-      onUpdatePin(draggingPinIndex, { x, y });
+    if (!window.mapboxgl) {
+      console.error('Mapbox GL JS not loaded');
       return;
     }
 
-    let foundRouteHover = null;
-    for (let idx = 0; idx < displayPins.length; idx++) {
-      const pin = displayPins[idx];
-      const dist = Math.sqrt((pin.x - x) ** 2 + (pin.y - y) ** 2);
-      if (dist < 22) {
-        foundRouteHover = idx;
-        break;
+    window.mapboxgl.accessToken = MAPBOX_TOKEN;
+
+    const map = new window.mapboxgl.Map({
+      container: mapContainerRef.current,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [-98.5795, 39.8283],
+      zoom: 4,
+    });
+
+    map.addControl(new window.mapboxgl.NavigationControl(), 'top-right');
+
+    map.on('dblclick', (e) => {
+      setSearchPosition({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+      setShowSearchModal(true);
+      setSelectedPlace(null);
+      setPinData({ name: '', description: '' });
+      setSearchQuery('');
+      setSearchResults([]);
+    });
+
+    mapRef.current = map;
+
+    return () => map.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current || !startCoordinates || !destCoordinates) return;
+
+    if (startMarkerRef.current) startMarkerRef.current.remove();
+    if (destMarkerRef.current) destMarkerRef.current.remove();
+
+    const startEl = document.createElement('div');
+    startEl.className = 'start-marker';
+    startEl.style.cssText = `
+    width: 40px;
+    height: 40px;
+    background-color: #10b981;
+    border: 4px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    z-index: 100;
+  `;
+    startEl.innerHTML = '🏁';
+
+    startEl.addEventListener('mouseenter', (e) => {
+      const rect = startEl.getBoundingClientRect();
+      const mapRect = mapContainerRef.current.getBoundingClientRect();
+      popupPositionRef.current = {
+        x: rect.left + rect.width / 2 - mapRect.left,
+        y: rect.top - mapRect.top
+      };
+      startEl.style.boxShadow = '0 8px 16px rgba(16, 185, 129, 0.6)';
+      startEl.style.zIndex = '1000';
+      setHoveredPin('start');
+    });
+
+    startEl.addEventListener('mouseleave', () => {
+      startEl.style.boxShadow = '0 4px 8px rgba(0,0,0,0.4)';
+      startEl.style.zIndex = '100';
+      setHoveredPin(null);
+    });
+
+    startMarkerRef.current = new window.mapboxgl.Marker(startEl)
+      .setLngLat(startCoordinates)
+      .addTo(mapRef.current);
+
+    const destEl = document.createElement('div');
+    destEl.className = 'dest-marker';
+    destEl.style.cssText = `
+    width: 40px;
+    height: 40px;
+    background-color: #ef4444;
+    border: 4px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    z-index: 100;
+  `;
+    destEl.innerHTML = '🎯';
+
+    destEl.addEventListener('mouseenter', (e) => {
+      const rect = destEl.getBoundingClientRect();
+      const mapRect = mapContainerRef.current.getBoundingClientRect();
+      popupPositionRef.current = {
+        x: rect.left + rect.width / 2 - mapRect.left,
+        y: rect.top - mapRect.top
+      };
+      destEl.style.boxShadow = '0 8px 16px rgba(239, 68, 68, 0.6)';
+      destEl.style.zIndex = '1000';
+      setHoveredPin('destination');
+    });
+
+    destEl.addEventListener('mouseleave', () => {
+      destEl.style.boxShadow = '0 4px 8px rgba(0,0,0,0.4)';
+      destEl.style.zIndex = '100';
+      setHoveredPin(null);
+    });
+
+    destMarkerRef.current = new window.mapboxgl.Marker(destEl)
+      .setLngLat(destCoordinates)
+      .addTo(mapRef.current);
+
+    const bounds = new window.mapboxgl.LngLatBounds();
+    bounds.extend(startCoordinates);
+    bounds.extend(destCoordinates);
+
+    customPins.forEach(pin => {
+      bounds.extend([pin.lng, pin.lat]);
+    });
+
+    mapRef.current.fitBounds(bounds, { padding: 100 });
+
+  }, [startCoordinates, destCoordinates, startPoint, destination]);
+
+  const pinsKey = useMemo(() =>
+    customPins.map(p => `${p.id}-${p.lat}-${p.lng}-${p.name}`).join('|'),
+    [customPins]
+  );
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
+
+    customPins.forEach((pin, idx) => {
+      const el = document.createElement('div');
+      el.className = 'custom-marker';
+      el.style.cssText = `
+    width: 40px;
+    height: 40px;
+    background-color: #6366f1;
+    border: 3px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    transition: all 0.2s ease;
+  `;
+      el.textContent = idx + 1;
+      el.title = pin.name;
+
+      el.addEventListener('mouseenter', (e) => {
+        const rect = el.getBoundingClientRect();
+        const mapRect = mapContainerRef.current.getBoundingClientRect();
+        popupPositionRef.current = {
+          x: rect.left + rect.width / 2 - mapRect.left,
+          y: rect.top - mapRect.top
+        };
+        el.style.boxShadow = '0 8px 16px rgba(99, 102, 241, 0.6)';
+        el.style.zIndex = '1000';
+        setHoveredPin(idx);
+      });
+      el.addEventListener('mouseleave', () => {
+        el.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
+        el.style.zIndex = 'auto';
+        setHoveredPin(null);
+      });
+
+      const marker = new window.mapboxgl.Marker(el)
+        .setLngLat([pin.lng, pin.lat])
+        .addTo(mapRef.current);
+
+      markersRef.current.push(marker);
+    });
+
+    if (customPins.length > 0 || startCoordinates || destCoordinates) {
+      const bounds = new window.mapboxgl.LngLatBounds();
+
+      if (startCoordinates) {
+        bounds.extend(startCoordinates);
       }
+      if (destCoordinates) {
+        bounds.extend(destCoordinates);
+      }
+
+      customPins.forEach(pin => {
+        bounds.extend([pin.lng, pin.lat]);
+      });
+
+      mapRef.current.fitBounds(bounds, { padding: 100 });
     }
-    setHoveredRoutePin(foundRouteHover);
+  }, [pinsKey, startCoordinates, destCoordinates]);
+
+  useEffect(() => {
+    if (!mapRef.current || !startCoordinates || !destCoordinates) return;
+
+    const map = mapRef.current;
+
+    const addRouteLines = () => {
+      try {
+        if (map.getLayer('route-line')) {
+          map.removeLayer('route-line');
+        }
+        if (map.getLayer('route-arrows')) {
+          map.removeLayer('route-arrows');
+        }
+        if (map.getSource('route')) {
+          map.removeSource('route');
+        }
+        if (map.getSource('route-arrows')) {
+          map.removeSource('route-arrows');
+        }
+
+        const routeCoordinates = [
+          startCoordinates,
+          ...customPins.map(pin => [pin.lng, pin.lat]),
+          destCoordinates
+        ];
+
+        map.addSource('route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: routeCoordinates
+            }
+          }
+        });
+
+        map.addLayer({
+          id: 'route-line',
+          type: 'line',
+          source: 'route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#6366f1',
+            'line-width': 4,
+            'line-opacity': 0.8,
+            
+          }
+        });
+
+        map.triggerRepaint();
+
+      } catch (error) {
+        console.error('Error adding route lines:', error);
+      }
+    };
+
+    if (!map.isStyleLoaded()) {
+      map.once('style.load', addRouteLines);
+    } else {
+      setTimeout(addRouteLines, 100);
+    }
+
+    return () => {
+      try {
+        if (map.getLayer('route-line')) {
+          map.removeLayer('route-line');
+        }
+        if (map.getLayer('route-arrows')) {
+          map.removeLayer('route-arrows');
+        }
+        if (map.getSource('route')) {
+          map.removeSource('route');
+        }
+        if (map.getSource('route-arrows')) {
+          map.removeSource('route-arrows');
+        }
+      } catch (error) {
+      }
+    };
+  }, [startCoordinates, destCoordinates, pinsKey]);
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    try {
+      const hasNumbers = /\d/.test(searchQuery);
+
+      const params = new URLSearchParams({
+        access_token: MAPBOX_TOKEN,
+        limit: '10',
+        autocomplete: 'false',
+      });
+
+      if (hasNumbers) {
+        params.append('types', 'address,poi');
+      } else {
+        params.append('types', 'poi,place,address');
+      }
+
+      if (!hasNumbers && searchPosition) {
+        params.append('proximity', `${searchPosition.lng},${searchPosition.lat}`);
+      }
+
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?${params}`
+      );
+      const data = await response.json();
+
+      if (data.features && data.features.length > 0) {
+        setSearchResults(data.features.map(feature => ({
+          id: feature.id,
+          name: feature.text,
+          address: feature.place_name,
+          lat: feature.center[1],
+          lng: feature.center[0],
+          category: feature.properties.category || feature.place_type[0],
+        })));
+      } else {
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      alert('Search failed. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  const handleMouseUp = () => {
-    setDraggingPinIndex(null);
+  useEffect(() => {
+    if (searchQuery.length < 3) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      handleSearch();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, searchPosition]);
+
+  const handleSelectPlace = (place) => {
+    setSelectedPlace(place);
+    setPinData({
+      name: place.name,
+      description: place.address,
+    });
+
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [place.lng, place.lat],
+        zoom: 14,
+      });
+    }
+  };
+
+  const handleAddPin = () => {
+    if (!selectedPlace || !pinData.name.trim()) {
+      alert('Please search and select a place');
+      return;
+    }
+
+    const newPin = {
+      id: Date.now(),
+      lat: selectedPlace.lat,
+      lng: selectedPlace.lng,
+      name: pinData.name.trim(),
+      description: pinData.description.trim() || selectedPlace.address,
+      address: selectedPlace.address,
+      category: selectedPlace.category,
+      addedBy: currentUser,
+      timestamp: new Date().toLocaleString(),
+    };
+
+    onAddPin(newPin);
+
+    setShowSearchModal(false);
+    setSelectedPlace(null);
+    setPinData({ name: '', description: '' });
+    setSearchQuery('');
+    setSearchResults([]);
   };
 
   return (
     <div className="relative w-full h-full">
-      <canvas
-        ref={canvasRef}
-        onClick={handleCanvasClick}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => {
-          setHoveredPin(null);
-          setHoveredRoutePin(null);
-          handleMouseUp();
-        }}
-        className="w-full h-full rounded-xl bg-white border-2 border-indigo-200 shadow-2xl"
-        style={{ cursor: draggingPinIndex !== null ? 'grabbing' : hoveredRoutePin !== null ? 'grab' : 'crosshair' }}
+      <div
+        ref={mapContainerRef}
+        className="w-full h-full rounded-xl shadow-2xl"
+        style={{ minHeight: '500px' }}
       />
 
-      {hoveredRoutePin !== null && displayPins[hoveredRoutePin] && draggingPinIndex === null && (
-        <div 
-          className="fixed bg-white rounded-xl shadow-2xl p-4 border-2 border-purple-400 max-w-sm z-50 pointer-events-none"
+      {hoveredPin !== null && (
+        <div
+          className="absolute bg-white rounded-xl shadow-2xl p-4 border-2 border-indigo-400 max-w-sm z-20 pointer-events-none"
           style={{
-            left: `${Math.min(mousePos.x + 20, window.innerWidth - 300)}px`,
-            top: `${Math.max(mousePos.y - 140, 10)}px`,
+            left: `${popupPositionRef.current.x}px`,
+            top: `${popupPositionRef.current.y - 10}px`,
+            transform: 'translate(-50%, -100%)',
           }}
         >
-          <div className="flex items-start gap-2 mb-2">
-            <span className="text-lg">📍</span>
-            <div className="flex-1">
-              <div className="text-sm font-bold text-gray-900 mb-1">
-                {displayPins[hoveredRoutePin].name}
-              </div>
-              <div className="text-xs text-gray-600">
-                {displayPins[hoveredRoutePin].description}
+          {hoveredPin === 'start' ? (
+            <div className="flex items-start gap-2 mb-2">
+              <span className="text-lg">🏁</span>
+              <div className="flex-1">
+                <div className="text-sm font-bold text-gray-900 mb-1">
+                  Start Point
+                </div>
+                <div className="text-xs text-gray-600 mb-1">
+                  {startPoint}
+                </div>
+                <div className="text-xs text-green-600 font-semibold">
+                  📍 Your journey begins here
+                </div>
               </div>
             </div>
-          </div>
-          <div className="border-t border-gray-200 pt-2 mt-2">
-            <p className="text-xs text-gray-600">
-              <span className="font-semibold">Added by:</span> {displayPins[hoveredRoutePin].addedBy}
-            </p>
-          </div>
+          ) : hoveredPin === 'destination' ? (
+            <div className="flex items-start gap-2 mb-2">
+              <span className="text-lg">🎯</span>
+              <div className="flex-1">
+                <div className="text-sm font-bold text-gray-900 mb-1">
+                  Destination
+                </div>
+                <div className="text-xs text-gray-600 mb-1">
+                  {destination}
+                </div>
+                <div className="text-xs text-red-600 font-semibold">
+                  📍 Your final destination
+                </div>
+              </div>
+            </div>
+          ) : customPins[hoveredPin] ? (
+            <>
+              <div className="flex items-start gap-2 mb-2">
+                <span className="text-lg">📍</span>
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-gray-900 mb-1">
+                    {customPins[hoveredPin].name}
+                  </div>
+                  <div className="text-xs text-gray-600 mb-1">
+                    {customPins[hoveredPin].description}
+                  </div>
+                  {customPins[hoveredPin].category && (
+                    <div className="text-xs text-indigo-600 font-semibold">
+                      📂 {customPins[hoveredPin].category}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="border-t border-gray-200 pt-2 mt-2">
+                <p className="text-xs text-gray-600">
+                  <span className="font-semibold">Added by:</span> {customPins[hoveredPin].addedBy}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {customPins[hoveredPin].timestamp}
+                </p>
+              </div>
+            </>
+          ) : null}
         </div>
       )}
 
-      {showPinModal && (
+      {showSearchModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <span>📍</span>
-                Add Place on Route
+                <Search size={24} className="text-indigo-600" />
+                Search Place
               </h3>
               <button
                 onClick={() => {
-                  setShowPinModal(false);
-                  setPinData({ lat: null, lng: null, name: '', description: '', address: '', x: null, y: null });
+                  setShowSearchModal(false);
+                  setSelectedPlace(null);
+                  setPinData({ name: '', description: '' });
+                  setSearchQuery('');
+                  setSearchResults([]);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 transition"
               >
                 <X size={24} />
               </button>
@@ -970,45 +526,115 @@ const drawMap = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Place Name *</label>
-                <input
-                  type="text"
-                  placeholder="Enter place name"
-                  value={pinData.name}
-                  onChange={(e) => setPinData({ ...pinData, name: e.target.value })}
-                  className="w-full p-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  autoFocus
-                />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Search for a place *
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Type to search places..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full p-3 pr-10 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    autoFocus
+                  />
+                  {isSearching && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <div className="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                <textarea
-                  placeholder="Enter description (optional)"
-                  value={pinData.description}
-                  onChange={(e) => setPinData({ ...pinData, description: e.target.value })}
-                  rows="3"
-                  className="w-full p-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                />
-              </div>
+              {searchResults.length > 0 && !selectedPlace && (
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  <p className="text-sm font-semibold text-gray-700">Select a place:</p>
+                  {searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      onClick={() => handleSelectPlace(result)}
+                      className="w-full text-left p-3 bg-gray-50 hover:bg-indigo-50 rounded-lg border border-gray-200 hover:border-indigo-300 transition"
+                    >
+                      <p className="text-sm font-semibold text-gray-900">{result.name}</p>
+                      <p className="text-xs text-gray-600 mt-1">{result.address}</p>
+                      {result.category && (
+                        <p className="text-xs text-indigo-600 mt-1">📂 {result.category}</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selectedPlace && (
+                <>
+                  <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                    <p className="text-sm font-semibold text-indigo-900 mb-1">
+                      ✓ {selectedPlace.name}
+                    </p>
+                    <p className="text-xs text-indigo-700">
+                      📍 {selectedPlace.address}
+                    </p>
+                    {selectedPlace.category && (
+                      <p className="text-xs text-indigo-600 mt-1">
+                        📂 {selectedPlace.category}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Custom Name (optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Override place name"
+                      value={pinData.name}
+                      onChange={(e) => setPinData({ ...pinData, name: e.target.value })}
+                      className="w-full p-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Description (optional)
+                    </label>
+                    <textarea
+                      placeholder="Add notes about this place"
+                      value={pinData.description}
+                      onChange={(e) => setPinData({ ...pinData, description: e.target.value })}
+                      rows="3"
+                      className="w-full p-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="p-3 bg-gray-50 rounded-lg text-sm border border-gray-200">
-                <p className="text-gray-700"><strong>Created by:</strong> {currentUser}</p>
+                <p className="text-gray-700">
+                  <strong>Added by:</strong> {currentUser}
+                </p>
               </div>
 
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={handleAddPin}
-                  className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700"
+                  disabled={!selectedPlace}
+                  className={`flex-1 py-3 rounded-lg font-semibold transition ${selectedPlace
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
                 >
                   Add Place
                 </button>
                 <button
                   onClick={() => {
-                    setShowPinModal(false);
-                    setPinData({ lat: null, lng: null, name: '', description: '', address: '', x: null, y: null });
+                    setShowSearchModal(false);
+                    setSelectedPlace(null);
+                    setPinData({ name: '', description: '' });
+                    setSearchQuery('');
+                    setSearchResults([]);
                   }}
-                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300"
+                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition"
                 >
                   Cancel
                 </button>

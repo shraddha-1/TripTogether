@@ -55,9 +55,14 @@ export default function LoginAuth({ onLoginSuccess }) {
       const newOtp = generateOTP();
       setGeneratedOtp(newOtp);
       
+      navigator.clipboard.writeText(newOtp).then(() => {
       // In production, you would send this OTP via email API
       console.log('🔐 Generated OTP:', newOtp);
+      alert(`Your OTP is: ${newOtp}\n\n(In production, this would be sent to your email)\n\n✓ OTP copied to clipboard!`);
+    }).catch(err => {
+      console.error('Failed to copy OTP:', err);
       alert(`Your OTP is: ${newOtp}\n\n(In production, this would be sent to your email)`);
+    });
       
       setStep('verify');
       setOtpTimer(120); // 2 minutes

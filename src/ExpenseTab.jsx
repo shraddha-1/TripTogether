@@ -8,6 +8,8 @@ export default function ExpenseTab({ currentTrip, setCurrentTrip, trips, setTrip
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [splitOption, setSplitOption] = useState("split_equally"); // new dropdown state
   const [error, setError] = useState("");
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
+
 
   const handlePayerChange = (e) => {
     const selectedPayer = e.target.value;
@@ -42,13 +44,15 @@ export default function ExpenseTab({ currentTrip, setCurrentTrip, trips, setTrip
       description,
       members: selectedMembers,
       perHead: parseFloat((amount / selectedMembers.length).toFixed(2)),
-      splitOption, // added to store how it was split
+      splitOption, 
+      date: expenseDate,
     };
 
     const updatedTrip = {
       ...currentTrip,
       expenses: [...(currentTrip.expenses || []), expense],
     };
+    setExpenseDate(new Date().toISOString().split('T')[0]);
 
     setCurrentTrip(updatedTrip);
     setTrips(trips.map((t) => (t.id === currentTrip.id ? updatedTrip : t)));
@@ -98,6 +102,12 @@ export default function ExpenseTab({ currentTrip, setCurrentTrip, trips, setTrip
             onChange={(e) => setAmount(e.target.value)}
             className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           />
+          <input
+  type="date"
+  value={expenseDate}
+  onChange={(e) => setExpenseDate(e.target.value)}
+  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+/>
         </div>
 
         <input
@@ -108,7 +118,6 @@ export default function ExpenseTab({ currentTrip, setCurrentTrip, trips, setTrip
           className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         />
 
-        {/* Split Option Dropdown - shows only if payer is selected */}
         {payer && (
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -185,6 +194,9 @@ export default function ExpenseTab({ currentTrip, setCurrentTrip, trips, setTrip
                   <p className="text-sm text-indigo-700 font-semibold">
                     Each owes: ${exp.perHead}
                   </p>
+                  <p className="text-sm text-gray-600">
+  Date: {new Date(exp.date).toLocaleDateString()}
+</p>
                 </div>
                 <button
                   onClick={() => deleteExpense(exp.id)}

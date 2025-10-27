@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
+import ProfileComponent from './ProfileComponent';
 
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic2hyYWRkaGEtc2hpbmRlIiwiYSI6ImNtZ29mbnA5azF1dmsybm9rYnk1d29tNHUifQ.WggehwJ0oUYLhFR8mzVnnQ';
 
-export default function TripCreationAutocomplete({onCreateTrip, existingTrips = [], onSelectTrip}) {
+export default function TripCreationAutocomplete({onCreateTrip, existingTrips = [], onSelectTrip, currentUser,
+  userEmail,
+  onLogout}) {
   const [newTripName, setNewTripName] = useState('');
   const [newTripStart, setNewTripStart] = useState('');
   const [newTripDest, setNewTripDest] = useState('');

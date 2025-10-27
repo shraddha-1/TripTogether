@@ -5,6 +5,8 @@ import TripCreationAutocomplete from './TripCreationAutocomplete';
 import LoginAuth from './LoginAuth';
 import ExpenseTab from './ExpenseTab';
 import ItineraryTab from './ItineraryTab';
+import ProfileComponent from './ProfileComponent';
+import TaskTab from './TaskTab';
 
 
 export default function TravelPlanner() {
@@ -26,6 +28,7 @@ export default function TravelPlanner() {
   const [mapKey, setMapKey] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
 
 
   const voteForPin = (pinId) => {
@@ -187,7 +190,7 @@ export default function TravelPlanner() {
     setDraggedPin(null);
     setDragOverIndex(null);
   };
-  // Add a useEffect to log when customPins changes (for debugging)
+
   useEffect(() => {
     console.log('CustomPins updated in map:', customPins);
   }, [customPins]);
@@ -238,11 +241,13 @@ export default function TravelPlanner() {
     navigator.clipboard.writeText(shareLink);
     alert('Share link copied to clipboard!');
   };
+
   if (!isLoggedIn) {
     return (
       <LoginAuth
         onLoginSuccess={(userData) => {
           setCurrentUser(userData.name);
+          setCurrentUserEmail(userData.email);
           setIsLoggedIn(true);
         }}
       />
@@ -253,9 +258,32 @@ export default function TravelPlanner() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">TripTogether</h1>
-          <p className="text-gray-600">Plan your group trips together, effortlessly</p>
+        <div className="mb-8 flex justify-between items-center relative">
+          <div className="text-center flex-1">
+            <h1
+              className="text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2"
+              style={{ height: '1.2em' }}
+            >
+              TripTogether
+            </h1>
+            <p className="text-gray-600 text-lg">Plan your group trips together, effortlessly</p>
+          </div>
+
+          <div className="absolute top-0 right-0">
+            <ProfileComponent
+              currentUser={currentUser}
+              userEmail={currentUserEmail}
+              tripsCreated={trips.length}
+              tripsJoined={0}
+              onLogout={() => {
+                setIsLoggedIn(false);
+                setCurrentUser(null);
+                setCurrentUserEmail('');
+                setCurrentTrip(null);
+                setTrips([]);
+              }}
+            />
+          </div>
         </div>
 
         {!currentTrip ? (
@@ -282,6 +310,17 @@ export default function TravelPlanner() {
             }}
             existingTrips={trips}
             onSelectTrip={setCurrentTrip}
+            currentUser={currentUser}
+            userEmail={currentUserEmail}
+            tripsCreated={trips.length}
+            tripsJoined={0}
+            onLogout={() => {
+              setIsLoggedIn(false);
+              setCurrentUser(null);
+              setCurrentUserEmail('');
+              setCurrentTrip(null);
+              setTrips([]);
+            }}
           />
         ) : (
           <div>
@@ -476,8 +515,8 @@ export default function TravelPlanner() {
               <button
                 onClick={() => setCurrentTab('itinerary')}
                 className={`px-6 py-3 rounded-lg font-semibold transition ${currentTab === 'itinerary'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white text-gray-800 hover:bg-gray-100'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white text-gray-800 hover:bg-gray-100'
                   }`}
               >
                 📅 Itinerary
@@ -606,79 +645,12 @@ export default function TravelPlanner() {
 
             {/* Tasks Tab */}
             {currentTab === 'tasks' && (
-              <div className="space-y-6">
-                {/* Add Task */}
-                <div className="bg-white rounded-lg shadow-lg p-6">
-                  <h3 className="text-xl font-bold text-gray-800 mb-4">Add a Task</h3>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder="Task (e.g., Book flights)"
-                      value={newTask}
-                      onChange={(e) => setNewTask(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Assign to (e.g., John)"
-                      value={newAssignee}
-                      onChange={(e) => setNewAssignee(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <button
-                      onClick={addTask}
-                      className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition flex items-center justify-center gap-2"
-                    >
-                      <Plus size={20} />
-                      Add Task
-                    </button>
-                  </div>
-                </div>
-
-                {/* Tasks List */}
-                <div className="bg-white rounded-lg shadow-lg p-6">
-                  <h3 className="text-xl font-bold text-gray-800 mb-4">Task List</h3>
-                  {currentTrip.tasks.length === 0 ? (
-                    <p className="text-gray-600">No tasks yet. Add one above!</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {currentTrip.tasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className={`border rounded-lg p-4 flex items-center justify-between transition ${task.completed
-                            ? 'bg-gray-100 border-gray-300'
-                            : 'border-indigo-300 bg-indigo-50'
-                            }`}
-                        >
-                          <div className="flex-1">
-                            <h4 className={`font-semibold ${task.completed ? 'line-through text-gray-600' : 'text-gray-800'}`}>
-                              {task.title}
-                            </h4>
-                            <p className="text-sm text-gray-600">Assigned to: <strong>{task.assignee}</strong></p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => toggleTask(task.id)}
-                              className={`px-4 py-2 rounded-lg font-semibold transition ${task.completed
-                                ? 'bg-green-500 text-white'
-                                : 'bg-gray-300 text-gray-800 hover:bg-gray-400'
-                                }`}
-                            >
-                              <Check size={18} />
-                            </button>
-                            <button
-                              onClick={() => deleteTask(task.id)}
-                              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <TaskTab
+                currentTrip={currentTrip}
+                setCurrentTrip={setCurrentTrip}
+                trips={trips}
+                setTrips={setTrips}
+              />
             )}
 
             {currentTab === 'expenses' && (
