@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, User, KeyRound, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { Mail, User, KeyRound, ArrowRight, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
 
-export default function LoginAuth({ onLoginSuccess }) {
+export default function LoginAuth({ onLoginSuccess, onBackToHome }) {
   const [step, setStep] = useState('input'); // 'input', 'verify', 'success'
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -124,9 +124,20 @@ export default function LoginAuth({ onLoginSuccess }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
+        {/* Back to Home Button */}
+        {step !== 'success' && onBackToHome && (
+          <button
+            onClick={onBackToHome}
+            className="mb-6 flex items-center gap-2 text-gray-600 hover:text-indigo-600 font-medium transition"
+          >
+            <ArrowLeft size={20} />
+            Back to Home
+          </button>
+        )}
+
         {/* Logo/Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl mb-4 shadow-lg">
             <span className="text-3xl">✈️</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">TripTogether</h1>

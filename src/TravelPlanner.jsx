@@ -9,7 +9,7 @@ import ProfileComponent from './ProfileComponent';
 import TaskTab from './TaskTab';
 
 
-export default function TravelPlanner() {
+export default function TravelPlanner({ userData, onLogoutToHome }) {
   const [currentTab, setCurrentTab] = useState('trips');
   const [trips, setTrips] = useState([]);
   const [currentTrip, setCurrentTrip] = useState(null);
@@ -26,9 +26,8 @@ export default function TravelPlanner() {
   const [draggedPin, setDraggedPin] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [mapKey, setMapKey] = useState(0);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  const currentUser = userData?.name || 'User';
+  const currentUserEmail = userData?.email || '';
 
 
   const voteForPin = (pinId, voteType) => {
@@ -262,17 +261,6 @@ export default function TravelPlanner() {
     alert('Share link copied to clipboard!');
   };
 
-  if (!isLoggedIn) {
-    return (
-      <LoginAuth
-        onLoginSuccess={(userData) => {
-          setCurrentUser(userData.name);
-          setCurrentUserEmail(userData.email);
-          setIsLoggedIn(true);
-        }}
-      />
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -307,11 +295,11 @@ export default function TravelPlanner() {
                 tripsCreated={trips.length}
                 tripsJoined={0}
                 onLogout={() => {
-                  setIsLoggedIn(false);
                   setCurrentUser(null);
                   setCurrentUserEmail('');
                   setCurrentTrip(null);
                   setTrips([]);
+                  onLogoutToHome();
                 }}
               />
             </div>
@@ -349,13 +337,7 @@ export default function TravelPlanner() {
               userEmail={currentUserEmail}
               tripsCreated={trips.length}
               tripsJoined={0}
-              onLogout={() => {
-                setIsLoggedIn(false);
-                setCurrentUser(null);
-                setCurrentUserEmail('');
-                setCurrentTrip(null);
-                setTrips([]);
-              }}
+              onLogout={onLogoutToHome}
             />
           </div>
         ) : (

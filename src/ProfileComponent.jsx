@@ -12,6 +12,13 @@ export default function ProfileComponent({ currentUser, userEmail, onLogout, tri
     return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
   };
 
+  const handleLogout = () => {
+    setShowProfileModal(false);
+    onLogout();
+    // Redirect to homepage
+    window.location.href = '/';
+  };
+
   return (
     <>
       {/* Profile Icon Button */}
@@ -25,10 +32,10 @@ export default function ProfileComponent({ currentUser, userEmail, onLogout, tri
 
       {/* Profile Modal */}
       {showProfileModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full overflow-hidden">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             {/* Header with gradient background */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 relative">
+            <div className="bg-indigo-600 p-6 relative">
               <button
                 onClick={() => setShowProfileModal(false)}
                 className="absolute top-4 right-4 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1 transition"
@@ -92,10 +99,7 @@ export default function ProfileComponent({ currentUser, userEmail, onLogout, tri
               {/* Action Buttons */}
               <div className="pt-4 border-t border-gray-200 space-y-3">
                 <button
-                  onClick={() => {
-                    setShowProfileModal(false);
-                    onLogout();
-                  }}
+                  onClick={handleLogout}
                   className="w-full px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold flex items-center justify-center gap-2 shadow-md"
                 >
                   <LogOut size={18} />
